@@ -39,11 +39,11 @@ function createHostSetupSettings(settings) {
 var init_host_settings = () => {};
 
 // src/index.ts
-import * as path8 from "path";
+import * as path9 from "path";
 
 // ../shared-display/src/client.ts
 var CHANNEL = "codesook/shared-display/v1";
-var SOURCES = ["ponytail", "caveman", "headroom", "rtk", "codegraph", "beads", "pstack"];
+var SOURCES = ["ponytail", "caveman", "headroom", "rtk", "codegraph", "beads", "pstack", "process-monitor"];
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -589,20 +589,30 @@ function createBehaviorStore(events, options = {}) {
 
 // src/doctor.ts
 import * as fs2 from "fs";
+import * as path5 from "path";
+
+// ../shared-display/src/project-integrations.ts
+import { execFile } from "child_process";
+import { realpathSync } from "fs";
 import * as path4 from "path";
-var realpath = (target) => {
+import { promisify } from "util";
+var git = promisify(execFile);
+function canonicalPath(target) {
+  const resolved = path4.resolve(target);
   try {
-    return fs2.realpathSync(target);
+    return realpathSync.native(resolved);
   } catch {
-    return path4.resolve(target);
+    return resolved;
   }
-};
+}
+
+// src/doctor.ts
 function listFiles(directory) {
-  return fs2.readdirSync(directory, { recursive: true, withFileTypes: true }).flatMap((entry) => entry.isFile() ? [path4.join(entry.parentPath, entry.name)] : []);
+  return fs2.readdirSync(directory, { recursive: true, withFileTypes: true }).flatMap((entry) => entry.isFile() ? [path5.join(entry.parentPath, entry.name)] : []);
 }
 function workflowCalledSkills(skillsRoot) {
-  const names = fs2.readdirSync(skillsRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory() && fs2.existsSync(path4.join(skillsRoot, entry.name, "SKILL.md"))).map((entry) => entry.name);
-  const text = listFiles(path4.join(skillsRoot, POTETO_SKILL)).filter((file) => file.endsWith(".md")).map((file) => fs2.readFileSync(file, "utf8")).join(`
+  const names = fs2.readdirSync(skillsRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory() && fs2.existsSync(path5.join(skillsRoot, entry.name, "SKILL.md"))).map((entry) => entry.name);
+  const text = listFiles(path5.join(skillsRoot, POTETO_SKILL)).filter((file) => file.endsWith(".md")).map((file) => fs2.readFileSync(file, "utf8")).join(`
 `);
   return names.filter((name) => name === POTETO_SKILL || new RegExp(`(?:\\*\\*|\`|/skill:|skill://)${name}(?![\\w-])`).test(text));
 }
@@ -650,13 +660,13 @@ function checkSkills({ commands, skillsRoot }) {
   if (skillCommands.size === 0) {
     return [{ check: "skills", severity: "warning", message: "OMP lists no skill commands (skills.enableSkillCommands off?), so ownership of the workflow-called skills cannot be checked." }];
   }
-  const root = realpath(skillsRoot) + path4.sep;
+  const root = canonicalPath(skillsRoot) + path5.sep;
   const findings = [];
   for (const name of called) {
     const owner = skillCommands.get(`skill:${name}`);
     if (!owner)
       findings.push({ check: "skills", severity: "error", message: `Skill ${name} is called by a workflow but OMP does not list it. Check the package is installed and the skill is not disabled.` });
-    else if (!owner.path || !realpath(owner.path).startsWith(root)) {
+    else if (!owner.path || !canonicalPath(owner.path).startsWith(root)) {
       findings.push({ check: "skills", severity: "error", message: `Skill ${name} resolves to ${owner.path ?? "another source"}, not pstack's copy, so workflows load that one instead.` });
     }
   }
@@ -925,12 +935,12 @@ function reminderText(state) {
 }
 
 // src/guards/blocking.ts
-import { execFile } from "child_process";
+import { execFile as execFile2 } from "child_process";
 import * as fs3 from "fs";
-import * as path6 from "path";
+import * as path7 from "path";
 
 // src/guards/shell.ts
-import * as path5 from "path";
+import * as path6 from "path";
 var WRAPPERS = new Set(["sudo", "doas", "env", "command", "builtin", "exec", "time", "nohup", "nice", "stdbuf", "xargs"]);
 var SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
 var EXEC_FLAGS = new Set(["-exec", "-execdir", "-ok", "-okdir"]);
@@ -1053,14 +1063,14 @@ function parsePerl(args) {
   const { inPlace, operands, hasScript } = parseClusters(args, "eEFIMmCdDx", "eE");
   return { inPlace, operands: hasScript ? operands : operands.slice(1) };
 }
-var baseName = (word) => path5.basename(word);
+var baseName = (word) => path6.basename(word);
 function inspect(words, walk, depth) {
   const found = (tool, parsed) => {
     if (!parsed.inPlace || walk.cwd === undefined)
       return;
     const cwd = walk.cwd;
     const named = parsed.operands.filter((operand) => !operand.includes("{}"));
-    const files = named.filter((operand) => !/^[~$]/.test(operand)).map((operand) => path5.resolve(cwd, operand));
+    const files = named.filter((operand) => !/^[~$]/.test(operand)).map((operand) => path6.resolve(cwd, operand));
     walk.edits.push({ tool, files, unresolved: named.length === 0 || named.length !== parsed.operands.length });
   };
   const run = (start2) => {
@@ -1078,7 +1088,7 @@ function inspect(words, walk, depth) {
   if (first === "cd") {
     const target = words[start + 1];
     if (target !== undefined && !/^[~$-]/.test(target))
-      walk.cwd = walk.cwd === undefined ? undefined : path5.resolve(walk.cwd, target);
+      walk.cwd = walk.cwd === undefined ? undefined : path6.resolve(walk.cwd, target);
     else
       walk.cwd = undefined;
     return;
@@ -1127,24 +1137,24 @@ function findInPlaceEdits(command, cwd) {
 // src/guards/blocking.ts
 var MUTATING_TOOLS = new Set(["edit", "ast_edit", "bash", "eval", "debug", "memory_edit", "manage_skill"]);
 var SCRATCH_PREFIX = "local://";
-function git(directory, args) {
+function git2(directory, args) {
   return new Promise((resolve4) => {
-    execFile("git", ["-C", directory, ...args], { timeout: 5000 }, (error, stdout) => resolve4(error ? undefined : stdout));
+    execFile2("git", ["-C", directory, ...args], { timeout: 5000 }, (error, stdout) => resolve4(error ? undefined : stdout));
   });
 }
 function nearestExistingDirectory(target) {
-  let directory = path6.dirname(target);
-  while (!fs3.existsSync(directory) && path6.dirname(directory) !== directory)
-    directory = path6.dirname(directory);
+  let directory = path7.dirname(target);
+  while (!fs3.existsSync(directory) && path7.dirname(directory) !== directory)
+    directory = path7.dirname(directory);
   return directory;
 }
 var gitRepositoryProbe = {
   async containsFile(pattern) {
-    const listed = await git(nearestExistingDirectory(pattern), ["ls-files", "--cached", "--others", "--exclude-standard", "--", pattern]);
+    const listed = await git2(nearestExistingDirectory(pattern), ["ls-files", "--cached", "--others", "--exclude-standard", "--", pattern]);
     return listed !== undefined && listed.trim() !== "";
   },
   async isInside(directory) {
-    return (await git(directory, ["rev-parse", "--is-inside-work-tree"]))?.trim() === "true";
+    return (await git2(directory, ["rev-parse", "--is-inside-work-tree"]))?.trim() === "true";
   }
 };
 function stringField(input, key) {
@@ -1185,7 +1195,7 @@ async function inPlaceEditFinding(call, probe) {
   const command = stringField(call.input, "command");
   if (command === undefined)
     return;
-  const cwd = path6.resolve(call.cwd, stringField(call.input, "cwd") ?? ".");
+  const cwd = path7.resolve(call.cwd, stringField(call.input, "cwd") ?? ".");
   for (const edit of findInPlaceEdits(command, cwd)) {
     const inRepository = edit.unresolved ? await probe.isInside(cwd) : await anyFile(edit.files, probe);
     if (inRepository) {
@@ -1618,7 +1628,7 @@ async function runPresetCommand(pi, ctx, notify, name, defaultThinking, options 
 
 // src/warn-guards.ts
 import * as fs4 from "fs/promises";
-import * as path7 from "path";
+import * as path8 from "path";
 
 // src/warnings.ts
 var CODE_FILE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|swift|rb|php|cs|c|h|cc|cpp|hpp|sh|bash|zsh|lua|sql)$/i;
@@ -1627,9 +1637,9 @@ var NARRATING = /^(?:now|first|then|next|finally|here(?:'s| we)|we|let's|loop(?:
 var MAX_QUOTED = 80;
 var MAX_REPORTED = 3;
 var SECTION_HEADERS = [/^\[(.+?)#[0-9A-Fa-f]{4}\]$/, /^\*\*\* (?:Update|Add) File: (.+)$/, /^\+\+\+ (?:b\/)?(.+)$/];
-function addedLinesOfPatch(patch, path7) {
+function addedLinesOfPatch(patch, path8) {
   const added = [];
-  let current = path7;
+  let current = path8;
   for (const line of patch.split(/\r?\n/)) {
     const header = SECTION_HEADERS.map((pattern) => pattern.exec(line)?.[1]).find((match) => match !== undefined);
     if (header !== undefined)
@@ -1639,26 +1649,26 @@ function addedLinesOfPatch(patch, path7) {
   }
   return added;
 }
-var linesOf = (text, path7) => text.split(/\r?\n/).map((line) => ({ path: path7, text: line }));
+var linesOf = (text, path8) => text.split(/\r?\n/).map((line) => ({ path: path8, text: line }));
 function addedLines(toolName, input) {
-  const path7 = typeof input.path === "string" ? input.path : undefined;
+  const path8 = typeof input.path === "string" ? input.path : undefined;
   if (toolName === "write")
-    return typeof input.content === "string" ? linesOf(input.content, path7) : [];
+    return typeof input.content === "string" ? linesOf(input.content, path8) : [];
   if (toolName !== "edit")
     return [];
   if (typeof input.new_string === "string")
-    return linesOf(input.new_string, path7);
+    return linesOf(input.new_string, path8);
   if (typeof input.input === "string")
-    return addedLinesOfPatch(input.input, path7);
+    return addedLinesOfPatch(input.input, path8);
   if (Array.isArray(input.edits)) {
-    return input.edits.flatMap((entry) => isRecord2(entry) && typeof entry.diff === "string" ? addedLinesOfPatch(entry.diff, path7) : []);
+    return input.edits.flatMap((entry) => isRecord2(entry) && typeof entry.diff === "string" ? addedLinesOfPatch(entry.diff, path8) : []);
   }
   return [];
 }
 function narratingComments(toolName, input) {
   const found = [];
-  for (const { path: path7, text } of addedLines(toolName, input)) {
-    if (path7 === undefined || !CODE_FILE.test(path7))
+  for (const { path: path8, text } of addedLines(toolName, input)) {
+    if (path8 === undefined || !CODE_FILE.test(path8))
       continue;
     const comment = COMMENT_LEADER.exec(text)?.[1];
     if (comment !== undefined && NARRATING.test(comment))
@@ -1750,7 +1760,7 @@ var PLAYBOOK_NAME = /^[a-z0-9][a-z0-9-]*$/;
 function createWarningGuards(options) {
   const { behavior, activation, skillDirectory } = options;
   let checkpointWarned = false;
-  const readPlaybook = async (name) => PLAYBOOK_NAME.test(name) ? fs4.readFile(path7.join(skillDirectory, "playbooks", `${name}.md`), "utf8").catch(() => {
+  const readPlaybook = async (name) => PLAYBOOK_NAME.test(name) ? fs4.readFile(path8.join(skillDirectory, "playbooks", `${name}.md`), "utf8").catch(() => {
     return;
   }) : undefined;
   return {
@@ -1987,7 +1997,7 @@ function pstackExtension(pi, options = {}) {
             settings: await loadSetupSettings(pi, options.setup),
             behavior: behavior.current(),
             commands: pi.getCommands(),
-            skillsRoot: path8.dirname(skillDirectory),
+            skillsRoot: path9.dirname(skillDirectory),
             displayHostAvailable: publisher.hostAvailable
           });
           notify(pi, ctx, doctorLevel(findings), doctorReport(findings));
